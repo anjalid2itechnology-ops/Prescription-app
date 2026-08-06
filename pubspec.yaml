@@ -1,0 +1,37 @@
+name: prescription_app
+description: A prescription management app built on the Atsign Platform (Doctor / Patient / Pharmacist / Admin roles).
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+
+  # --- Utilities ---
+  path_provider: ^2.1.2
+  uuid: ^4.3.3
+  intl: ^0.20.2
+  url_launcher: ^6.2.5
+  provider: ^6.1.2
+  crypto: ^3.0.3
+  shared_preferences: ^2.5.5
+  qr_flutter: ^4.1.0
+  image_picker: ^1.2.3
+  firebase_core: ^4.12.1
+  firebase_auth: ^6.5.6
+  cloud_firestore: ^6.7.1
+  http: ^1.6.0
+  flutter_secure_storage: ^10.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
