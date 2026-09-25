@@ -172,7 +172,14 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                             padding: const EdgeInsets.only(top: 6),
                             child: Row(
                               children: [
-                                Text("with ${a.doctorAtSign}", style: const TextStyle(color: AppColors.textSecondary, fontSize: 12.5)),
+                                Expanded(
+                                  child: Text(
+                                    "with Dr. ${a.doctorAtSign.length > 8 ? a.doctorAtSign.substring(0, 8) : a.doctorAtSign}",
+                                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                ),
                                 const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
@@ -195,5 +202,6 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     );
   }
 }
+
 
 

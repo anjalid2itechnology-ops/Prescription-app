@@ -14,14 +14,28 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen> {
   final _service = InventoryService();
   late Future<List<Medicine>> _future;
+  final _searchCtrl = TextEditingController();
+  String _query = "";
 
   @override
   void initState() {
     super.initState();
     _future = _service.getInventory();
+    _searchCtrl.addListener(() => setState(() => _query = _searchCtrl.text.trim().toLowerCase()));
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   void _refresh() => setState(() => _future = _service.getInventory());
+
+  List<Medicine> _filter(List<Medicine> list) {
+    if (_query.isEmpty) return list;
+    return list.where((m) => m.name.toLowerCase().contains(_query)).toList();
+  }
 
   Future<void> _addMedicineSheet() async {
     final nameCtrl = TextEditingController();
@@ -108,21 +122,40 @@ class _InventoryScreenState extends State<InventoryScreen> {
               label: const Text("Add"),
             ),
           ),
+          const SizedBox(height: 4),
+          TextField(
+            controller: _searchCtrl,
+            decoration: InputDecoration(
+              hintText: "Search medicine...",
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () => _searchCtrl.clear(),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 14),
           Expanded(
             child: FutureBuilder<List<Medicine>>(
               future: _future,
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const AppLoading();
-                final list = snapshot.data!;
-                if (list.isEmpty) {
+                final all = snapshot.data!;
+                if (all.isEmpty) {
                   return const EmptyState(icon: Icons.inventory_2_outlined, message: "No medicines added yet.");
                 }
-                final lowStock = list.where((m) => m.stockQuantity < 10).toList();
+                final filtered = _filter(all);
+                final lowStock = all.where((m) => m.stockQuantity < 10).toList();
+                if (filtered.isEmpty) {
+                  return EmptyState(icon: Icons.search_off_rounded, message: "No medicines match \"$_query\".");
+                }
                 return RefreshIndicator(
                   onRefresh: () async => _refresh(),
                   child: ListView(
                     children: [
-                      if (lowStock.isNotEmpty)
+                      if (_query.isEmpty && lowStock.isNotEmpty)
                         Container(
                           margin: const EdgeInsets.only(bottom: 14),
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -146,14 +179,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
                             ],
                           ),
                         ),
-                      ...list.map((m) {
+                      ...filtered.map((m) {
                         final low = m.stockQuantity < 10;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: Card(
                             child: ListTile(
                               title: Text(m.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              subtitle: Text("₹${m.unitPrice.toStringAsFixed(2)} · expires ${m.expiryDate}"),
+                              subtitle: Text("\u20b9${m.unitPrice.toStringAsFixed(2)} \u00b7 expires ${m.expiryDate}"),
                               trailing: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(

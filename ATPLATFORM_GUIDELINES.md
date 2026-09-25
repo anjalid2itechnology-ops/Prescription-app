@@ -7,6 +7,31 @@ truth for future LLM sessions working on this codebase — read this **before**
 making changes. Project-specific details (data flows, key tables, node
 mappings) live in `README.md`, not here.
 
+## Workspace Folder Structure
+- `android/` — Android app module and Gradle build files.
+- `ios/` — iOS app project and platform-specific configurations.
+- `linux/` — Linux desktop runner files.
+- `macos/` — macOS desktop runner files.
+- `web/` — web app entrypoint and web manifest.
+- `windows/` — Windows desktop runner files.
+- `lib/` — Flutter/Dart application source code.
+- `test/` — Dart and Flutter widget/unit tests.
+- `build/` — Generated build artifacts and intermediate outputs.
+- `pubspec.yaml` — Dart/Flutter package dependencies and app metadata.
+- `README.md` — Project-specific documentation, architecture, and setup.
+- `ATPLATFORM_GUIDELINES.md` — Atsign Platform SDK reference guidelines.
+
+## Project Architecture
+- `lib/main.dart` — app entrypoint and root widget.
+- `lib/screens/` — authentication, role routing, and role-specific dashboards.
+- `lib/services/` — business logic, Atsign service wrappers, and data access.
+- `lib/models/` — domain models for prescriptions, patients, appointments, inventory, and accounts.
+- `lib/widgets/` — reusable UI components and shared controls.
+- `lib/theme/` — app-wide styling, themes, and visual constants.
+- `lib` code is organized around the Atsign Platform: no centralized backend, all state is persisted as encrypted `AtKey`s on the user’s own atServer.
+- The app supports four roles: Doctor, Patient, Pharmacist, Admin, each with separate UI flows and data permissions.
+- Project-specific data flow, key tables, and node mappings live in `README.md`, not in this SDK reference.
+
 ## Core SDK References
 - Primary SDK: at_client ^3.11.0 — https://pub.dev/packages/at_client
 - Common utilities: at_commons (included with at_client) — https://pub.dev/packages/at_commons

@@ -1,4 +1,4 @@
-﻿import "dart:convert";
+import "dart:convert";
 import "package:http/http.dart" as http;
 import "api_config.dart";
 import "auth_storage.dart";
@@ -38,6 +38,16 @@ class PatientAccountService {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<void> updateAtSign({required String phone, required String atSign}) async {
+    try {
+      await http.put(
+        Uri.parse("${ApiConfig.baseUrl}/patient-accounts/$phone"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"atSign": atSign}),
+      );
+    } catch (_) {}
   }
 
   Future<Map<String, dynamic>?> getProfile(String phone) async {

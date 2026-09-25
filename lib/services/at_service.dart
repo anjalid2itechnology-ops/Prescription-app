@@ -1,41 +1,25 @@
 ﻿import "dart:convert";
-import "package:shared_preferences/shared_preferences.dart";
+import "package:at_client_mobile/at_client_mobile.dart";
+import "package:at_commons/at_commons.dart";
 
 class AtService {
   AtService._internal();
   static final AtService instance = AtService._internal();
 
   static const String namespace = "prescriptionapp";
-  static const String _prefsKey = "at_service_store_v1";
 
-  Map<String, Map<String, dynamic>> _store = {};
-  bool _loaded = false;
-  String? _currentAtSign = "@demo";
+  String? get currentAtSign =>
+      AtClientManager.getInstance().atClient.getCurrentAtSign();
 
-  String? get currentAtSign => _currentAtSign;
-
-  Future<void> _ensureLoaded() async {
-    if (_loaded) return;
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefsKey);
-    if (raw != null) {
-      final decoded = jsonDecode(raw) as Map<String, dynamic>;
-      _store = decoded.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
-    }
-    _loaded = true;
-  }
-
-  Future<void> _persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, jsonEncode(_store));
-  }
+  AtClient get _atClient => AtClientManager.getInstance().atClient;
 
   Future<void> initSession({
     required String atSign,
     dynamic atChops,
     dynamic atLookUp,
   }) async {
-    _currentAtSign = atSign.startsWith("@") ? atSign : "@$atSign";
+    // AtClientManager already has current atSign set by AtOnboarding flow.
+    // Nothing extra needed here — kept for backward compatibility with callers.
   }
 
   Future<bool> putJson({
@@ -45,10 +29,21 @@ class AtService {
     bool isPublic = false,
     Duration? ttl,
   }) async {
-    await _ensureLoaded();
-    _store[key] = Map<String, dynamic>.from(value);
-    await _persist();
-    return true;
+    try {
+      final atKey = AtKey()
+        ..key = key
+        ..namespace = namespace
+        ..sharedWith = sharedWithAtSign
+        ..metadata = (Metadata()
+          ..isPublic = isPublic
+          ..ttl = ttl?.inMilliseconds ?? 0);
+
+      final jsonString = jsonEncode(value);
+      final putResult = await _atClient.put(atKey, jsonString);
+      return putResult;
+    } catch (e) {
+      return false;
+    }
   }
 
   Future<Map<String, dynamic>?> getJson({
@@ -56,19 +51,42 @@ class AtService {
     String? sharedByAtSign,
     bool bypassCache = false,
   }) async {
-    await _ensureLoaded();
-    return _store[key];
+    try {
+      final atKey = AtKey()
+        ..key = key
+        ..namespace = namespace
+        ..sharedBy = sharedByAtSign;
+
+      final getResult = await _atClient.get(atKey);
+      final value = getResult.value;
+      if (value == null) return null;
+      return jsonDecode(value) as Map<String, dynamic>;
+    } catch (e) {
+      return null;
+    }
   }
 
   Future<List<Map<String, dynamic>>> getAllForPrefix({
     required String prefix,
     String? sharedByAtSign,
   }) async {
-    await _ensureLoaded();
-    return _store.entries
-        .where((e) => e.key.startsWith(prefix))
-        .map((e) => e.value)
-        .toList();
+    try {
+      final keys = await _atClient.getAtKeys(
+        regex: prefix,
+        sharedBy: sharedByAtSign,
+      );
+
+      final results = <Map<String, dynamic>>[];
+      for (final k in keys) {
+        final res = await _atClient.get(k);
+        if (res.value != null) {
+          results.add(jsonDecode(res.value) as Map<String, dynamic>);
+        }
+      }
+      return results;
+    } catch (e) {
+      return [];
+    }
   }
 
   Future<bool> notifyUpdate({
@@ -76,9 +94,21 @@ class AtService {
     required Map<String, dynamic> value,
     required String toAtSign,
   }) async {
-    await _ensureLoaded();
-    _store[key] = Map<String, dynamic>.from(value);
-    await _persist();
-    return true;
+    try {
+      final atKey = AtKey()
+        ..key = key
+        ..namespace = namespace
+        ..sharedWith = toAtSign;
+
+      final jsonString = jsonEncode(value);
+      await _atClient.put(atKey, jsonString);
+
+      await _atClient.notificationService.notify(
+        NotificationParams.forUpdate(atKey, value: jsonString),
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 }

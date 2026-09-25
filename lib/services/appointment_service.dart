@@ -1,7 +1,8 @@
-﻿import "dart:convert";
+import "dart:convert";
 import "../models/appointment.dart";
 import "api_config.dart";
 import "api_client.dart";
+import "at_service.dart";
 
 class AppointmentService {
   Future<Appointment?> bookAppointment({
@@ -23,7 +24,19 @@ class AppointmentService {
         },
       );
       if (res.statusCode != 200) return null;
-      return Appointment.fromJson(jsonDecode(res.body));
+      final appointment = Appointment.fromJson(jsonDecode(res.body));
+      try {
+        final atKey = "appointment.${appointment.id}";
+        final atValue = {
+          "patientAtSign": patientAtSign,
+          "doctorAtSign": doctorAtSign,
+          "date": date,
+          "timeSlot": timeSlot,
+        };
+        await AtService.instance.putJson(key: atKey, value: atValue, sharedWithAtSign: doctorAtSign);
+        await AtService.instance.notifyUpdate(key: atKey, value: atValue, toAtSign: doctorAtSign);
+      } catch (_) {}
+      return appointment;
     } catch (_) {
       return null;
     }

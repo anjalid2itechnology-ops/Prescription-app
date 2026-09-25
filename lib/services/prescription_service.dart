@@ -1,7 +1,8 @@
-﻿import "dart:convert";
+import "dart:convert";
 import "../models/prescription.dart";
 import "api_config.dart";
 import "api_client.dart";
+import "at_service.dart";
 
 class PrescriptionService {
   Future<Prescription?> createPrescription({
@@ -27,7 +28,37 @@ class PrescriptionService {
         },
       );
       if (res.statusCode != 200) return null;
-      return Prescription.fromJson(jsonDecode(res.body));
+      final prescription = Prescription.fromJson(jsonDecode(res.body));
+
+      // Also store on AtSign network (encrypted, shared with patient + pharmacist)
+      try {
+        final atKey = "prescription.${prescription.id}";
+        final atValue = prescription.toJson();
+
+        await AtService.instance.putJson(
+          key: atKey,
+          value: atValue,
+          sharedWithAtSign: patientAtSign,
+        );
+
+        await AtService.instance.notifyUpdate(
+          key: atKey,
+          value: atValue,
+          toAtSign: patientAtSign,
+        );
+
+        if (pharmacistAtSign.isNotEmpty) {
+          await AtService.instance.notifyUpdate(
+            key: atKey,
+            value: atValue,
+            toAtSign: pharmacistAtSign,
+          );
+        }
+      } catch (_) {
+        // AtSign sync failed silently — MongoDB copy already saved, app still works
+      }
+
+      return prescription;
     } catch (_) {
       return null;
     }

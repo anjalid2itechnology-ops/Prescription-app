@@ -1,4 +1,4 @@
-﻿import "package:flutter/material.dart";
+import "package:flutter/material.dart";
 import "package:firebase_core/firebase_core.dart";
 import "package:shared_preferences/shared_preferences.dart";
 import "theme/app_theme.dart";
@@ -6,6 +6,16 @@ import "theme/theme_controller.dart";
 import "theme/accent_controller.dart";
 import "screens/onboarding_screen.dart";
 import "screens/welcome_landing_screen.dart";
+import 'package:at_client_mobile/at_client_mobile.dart';
+import 'screens/atsign_gate_screen.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'services/api_config.dart';
+import 'services/at_client_preference_builder.dart';
+import 'models/user_account.dart';
+import 'screens/doctor/doctor_dashboard.dart';
+import 'screens/pharmacist/pharmacist_dashboard.dart';
+import 'screens/patient/patient_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,14 +24,55 @@ void main() async {
   await AccentController.load();
   final prefs = await SharedPreferences.getInstance();
   final onboardingDone = prefs.getBool("onboarding_done") ?? false;
-  runApp(PrescriptionApp(onboardingDone: onboardingDone));
+
+  final keyChainManager = KeyChainManager.getInstance();
+  final atSignsList = await keyChainManager.getAtSignListFromKeychain();
+  final hasAtSign = atSignsList != null && atSignsList.isNotEmpty;
+
+  Widget initialScreen;
+
+  if (!hasAtSign) {
+    initialScreen = const AtsignGateScreen();
+  } else {
+    final atSign = atSignsList!.first;
+    try {
+      final checkRes = await http.get(Uri.parse("${ApiConfig.baseUrl}/atsign-check/$atSign"));
+      final checkData = jsonDecode(checkRes.body);
+
+      if (checkData["taken"] == true) {
+        final atClientPreference = await AtClientPreferenceBuilder.build();
+        await AtClientManager.getInstance().setCurrentAtSign(
+          atSign,
+          AtClientPreferenceBuilder.namespace,
+          atClientPreference,
+        );
+
+        final role = checkData["role"];
+        if (role == "doctor") {
+          initialScreen = DoctorDashboard(account: UserAccount.fromJson(checkData["account"]));
+        } else if (role == "pharmacist") {
+          initialScreen = PharmacistDashboard(account: UserAccount.fromJson(checkData["account"]));
+        } else if (role == "patient") {
+          initialScreen = PatientDashboard(phoneNumber: checkData["phone"]);
+        } else {
+          initialScreen = onboardingDone ? const WelcomeLandingScreen() : const OnboardingScreen();
+        }
+      } else {
+        initialScreen = onboardingDone ? const WelcomeLandingScreen() : const OnboardingScreen();
+      }
+    } catch (_) {
+      initialScreen = onboardingDone ? const WelcomeLandingScreen() : const OnboardingScreen();
+    }
+  }
+
+  runApp(PrescriptionApp(initialScreen: initialScreen));
 }
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
 class PrescriptionApp extends StatelessWidget {
-  final bool onboardingDone;
-  const PrescriptionApp({super.key, required this.onboardingDone});
+  final Widget initialScreen;
+  const PrescriptionApp({super.key, required this.initialScreen});
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +89,7 @@ class PrescriptionApp extends StatelessWidget {
               theme: AppTheme.light(accent),
               darkTheme: AppTheme.dark(accent),
               themeMode: mode,
-              home: onboardingDone ? const WelcomeLandingScreen() : const OnboardingScreen(),
+              home: initialScreen,
               builder: (context, child) => Stack(
                 children: [
                   if (child != null) child,

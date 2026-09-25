@@ -1,8 +1,8 @@
-﻿import 'package:flutter/material.dart';
-import '../../models/prescription.dart';
-import '../../services/prescription_service.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/common_widgets.dart';
+﻿import "package:flutter/material.dart";
+import "../../models/prescription.dart";
+import "../../services/prescription_service.dart";
+import "../../theme/app_theme.dart";
+import "../../widgets/common_widgets.dart";
 
 class PrescriptionHistoryScreen extends StatefulWidget {
   final String doctorId;
@@ -14,39 +14,80 @@ class PrescriptionHistoryScreen extends StatefulWidget {
 
 class _PrescriptionHistoryScreenState extends State<PrescriptionHistoryScreen> {
   late Future<List<Prescription>> _future;
+  final _searchCtrl = TextEditingController();
+  String _query = "";
 
   @override
   void initState() {
     super.initState();
     _future = PrescriptionService().getHistoryForDoctor(widget.doctorId);
+    _searchCtrl.addListener(() => setState(() => _query = _searchCtrl.text.trim().toLowerCase()));
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   void _refresh() => setState(() => _future = PrescriptionService().getHistoryForDoctor(widget.doctorId));
+
+  List<Prescription> _filter(List<Prescription> list) {
+    if (_query.isEmpty) return list;
+    return list.where((p) {
+      final diagnosisMatch = p.diagnosis.toLowerCase().contains(_query);
+      final medicineMatch = p.medicines.any((m) => m.name.toLowerCase().contains(_query));
+      return diagnosisMatch || medicineMatch;
+    }).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: FutureBuilder<List<Prescription>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const AppLoading();
-          final list = snapshot.data!;
-          if (list.isEmpty) {
-            return const EmptyState(
-              icon: Icons.receipt_long_outlined,
-              message: 'No prescriptions written yet.\nTap "New prescription" to get started.',
-            );
-          }
-          return RefreshIndicator(
-            onRefresh: () async => _refresh(),
-            child: ListView.separated(
-              itemCount: list.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, i) => _PrescriptionCard(prescription: list[i]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _searchCtrl,
+            decoration: InputDecoration(
+              hintText: "Search by diagnosis or medicine...",
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () => _searchCtrl.clear(),
+                    ),
             ),
-          );
-        },
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: FutureBuilder<List<Prescription>>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const AppLoading();
+                final filtered = _filter(snapshot.data!);
+                if (filtered.isEmpty) {
+                  return EmptyState(
+                    icon: Icons.receipt_long_outlined,
+                    message: _query.isEmpty
+                        ? "No prescriptions written yet.\nTap \"New prescription\" to get started."
+                        : "No prescriptions match \"$_query\".",
+                  );
+                }
+                return RefreshIndicator(
+                  onRefresh: () async => _refresh(),
+                  child: ListView.separated(
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, i) => _PrescriptionCard(prescription: filtered[i]),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -80,7 +121,7 @@ class _PrescriptionCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    prescription.dispensed ? 'Dispensed' : 'Pending',
+                    prescription.dispensed ? "Dispensed" : "Pending",
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -94,13 +135,13 @@ class _PrescriptionCard extends StatelessWidget {
             ...prescription.medicines.map((m) => Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Text(
-                    'â€¢ ${m.name} â€” ${m.dosage}, ${m.frequency}, ${m.duration}',
+                    "\u2022 ${m.name} \u2014 ${m.dosage}, ${m.frequency}, ${m.duration}",
                     style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
                 )),
             if (prescription.notes.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text('Notes: ${prescription.notes}',
+              Text("Notes: ${prescription.notes}",
                   style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
             ],
           ],
@@ -109,4 +150,3 @@ class _PrescriptionCard extends StatelessWidget {
     );
   }
 }
-

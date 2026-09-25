@@ -1,4 +1,4 @@
-﻿import "package:flutter/material.dart";
+import "package:flutter/material.dart";
 import "../models/user_account.dart";
 import "../services/account_service.dart";
 import "../services/patient_account_service.dart";
@@ -12,6 +12,8 @@ import "pharmacist/pharmacist_dashboard.dart";
 import "admin/admin_dashboard.dart";
 import "dart:convert";
 import "package:crypto/crypto.dart";
+import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
+import '../services/at_client_preference_builder.dart';
 
 class RoleRouterScreen extends StatefulWidget {
   const RoleRouterScreen({super.key});
@@ -29,6 +31,7 @@ class _RoleRouterScreenState extends State<RoleRouterScreen> {
   final _phoneCtrl = TextEditingController();
   bool _busy = false;
   String? _error;
+  bool _obscurePassword = true;
 
   static const _adminPasswordHash =
       "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8";
@@ -47,6 +50,34 @@ class _RoleRouterScreenState extends State<RoleRouterScreen> {
         setState(() => _error = "Invalid email or password.");
         return;
       }
+
+      try {
+        final atClientPreference = await AtClientPreferenceBuilder.build();
+        final keyChainManager = KeyChainManager.getInstance();
+        final activatedAtSigns = await keyChainManager.getAtSignListFromKeychain();
+        final userAtSign = account.atSign;
+
+        if (activatedAtSigns != null && activatedAtSigns.contains(userAtSign)) {
+          await AtClientManager.getInstance().setCurrentAtSign(
+            userAtSign,
+            AtClientPreferenceBuilder.namespace,
+            atClientPreference,
+          );
+        } else {
+          await AtOnboarding.onboard(
+            context: context,
+            config: AtOnboardingConfig(
+              atClientPreference: atClientPreference,
+              domain: AtClientPreferenceBuilder.rootDomain,
+              rootEnvironment: RootEnvironment.Production,
+              appAPIKey: 'c8e81c89-0556-4b50-8a29-032d9d43d511',
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('ATSIGN ONBOARD ERROR: $e');
+      }
+
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(
         builder: (_) => staffRole == StaffRole.doctor
@@ -89,6 +120,41 @@ class _RoleRouterScreenState extends State<RoleRouterScreen> {
         setState(() => _error = "Invalid phone number or password.");
         return;
       }
+
+      try {
+        final atClientPreference = await AtClientPreferenceBuilder.build();
+        final profile = await PatientAccountService().getProfile(_phoneCtrl.text.trim());
+        final userAtSign = profile?["atSign"] as String?;
+        final keyChainManager = KeyChainManager.getInstance();
+        final activatedAtSigns = await keyChainManager.getAtSignListFromKeychain();
+
+        if (userAtSign != null && activatedAtSigns != null && activatedAtSigns.contains(userAtSign)) {
+          await AtClientManager.getInstance().setCurrentAtSign(
+            userAtSign,
+            AtClientPreferenceBuilder.namespace,
+            atClientPreference,
+          );
+        } else {
+          final onboardResult = await AtOnboarding.onboard(
+            context: context,
+            config: AtOnboardingConfig(
+              atClientPreference: atClientPreference,
+              domain: AtClientPreferenceBuilder.rootDomain,
+              rootEnvironment: RootEnvironment.Production,
+              appAPIKey: 'c8e81c89-0556-4b50-8a29-032d9d43d511',
+            ),
+          );
+          if (onboardResult.status == AtOnboardingResultStatus.success && onboardResult.atsign != null) {
+            await PatientAccountService().updateAtSign(
+              phone: _phoneCtrl.text.trim(),
+              atSign: onboardResult.atsign!,
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('ATSIGN ONBOARD ERROR: $e');
+      }
+
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(
         builder: (_) => PatientDashboard(phoneNumber: _phoneCtrl.text.trim()),
@@ -201,6 +267,17 @@ class _RoleRouterScreenState extends State<RoleRouterScreen> {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => ForgotPasswordScreen(identifier: id)));
   }
 
+  InputDecoration _passwordDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: const Icon(Icons.lock_outline_rounded),
+      suffixIcon: IconButton(
+        icon: Icon(_obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
+        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+      ),
+    );
+  }
+
   Widget _credentialForm() {
     Widget body;
     VoidCallback onSubmit;
@@ -228,8 +305,8 @@ class _RoleRouterScreenState extends State<RoleRouterScreen> {
       case _Role.admin:
         body = TextField(
           controller: _passCtrl,
-          obscureText: true,
-          decoration: const InputDecoration(labelText: "Admin password", prefixIcon: Icon(Icons.lock_outline_rounded)),
+          obscureText: _obscurePassword,
+          decoration: _passwordDecoration("Admin password"),
         );
         onSubmit = _submitAdminLogin;
         icon = Icons.admin_panel_settings_rounded; color = AppColors.adminTag; title = "Admin login";
@@ -246,8 +323,8 @@ class _RoleRouterScreenState extends State<RoleRouterScreen> {
           const SizedBox(height: 14),
           TextField(
             controller: _passCtrl,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: "Password", prefixIcon: Icon(Icons.lock_outline_rounded)),
+            obscureText: _obscurePassword,
+            decoration: _passwordDecoration("Password"),
           ),
         ]);
         onSubmit = _submitPatientLogin;
@@ -335,8 +412,8 @@ class _RoleRouterScreenState extends State<RoleRouterScreen> {
         const SizedBox(height: 14),
         TextField(
           controller: _passCtrl,
-          obscureText: true,
-          decoration: const InputDecoration(labelText: "Password", prefixIcon: Icon(Icons.lock_outline_rounded)),
+          obscureText: _obscurePassword,
+          decoration: _passwordDecoration("Password"),
         ),
       ],
     );

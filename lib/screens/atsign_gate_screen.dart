@@ -2,6 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import 'welcome_auth_screen.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../services/api_config.dart';
+import '../models/user_account.dart';
+import 'doctor/doctor_dashboard.dart';
+import 'pharmacist/pharmacist_dashboard.dart';
+import 'patient/patient_dashboard.dart';
+import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
+import '../services/at_client_preference_builder.dart';
 
 /// MANDATORY FIRST-RUN ATSIGN GATE.
 /// Shown automatically whenever KeychainStorage().getAllAtsigns() is empty.
@@ -89,10 +98,58 @@ class AtsignGateScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton(
-                    onPressed: () {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const WelcomeAuthScreen()),
+                    onPressed: () async {
+                      final atClientPreference = await AtClientPreferenceBuilder.build();
+                      final result = await AtOnboarding.onboard(
+                        context: context,
+                        config: AtOnboardingConfig(
+                          atClientPreference: atClientPreference,
+                          domain: AtClientPreferenceBuilder.rootDomain,
+                          rootEnvironment: RootEnvironment.Production,
+          appAPIKey: 'c8e81c89-0556-4b50-8a29-032d9d43d511',
+                        ),
                       );
+                      switch (result.status) {
+                        case AtOnboardingResultStatus.success:
+                          if (context.mounted) {
+                            final atSign = result.atsign;
+                            Widget destination = const WelcomeAuthScreen();
+
+                            if (atSign != null) {
+                              try {
+                                final checkRes = await http.get(Uri.parse("${ApiConfig.baseUrl}/atsign-check/$atSign"));
+                                final checkData = jsonDecode(checkRes.body);
+
+                                if (checkData["taken"] == true) {
+                                  final role = checkData["role"];
+                                  if (role == "doctor") {
+                                    destination = DoctorDashboard(account: UserAccount.fromJson(checkData["account"]));
+                                  } else if (role == "pharmacist") {
+                                    destination = PharmacistDashboard(account: UserAccount.fromJson(checkData["account"]));
+                                  } else if (role == "patient") {
+                                    destination = PatientDashboard(phoneNumber: checkData["phone"]);
+                                  }
+                                }
+                              } catch (_) {}
+                            }
+
+                            if (context.mounted) {
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(builder: (_) => destination),
+                              );
+                            }
+                          }
+                          break;
+                        case AtOnboardingResultStatus.error:
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Onboarding failed. Please try again.')),
+                            );
+                          }
+                          break;
+                        case AtOnboardingResultStatus.cancel:
+                          break;
+                      }
                     },
                     child: const Text('Continue'),
                   ),

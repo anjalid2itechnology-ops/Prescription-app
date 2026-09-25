@@ -21,18 +21,33 @@ class _PatientsScreenState extends State<PatientsScreen> {
   final _recent = RecentlyViewedService();
   late Future<List<Patient>> _future;
   late Future<List<RecentlyViewedPatient>> _recentFuture;
+  final _searchCtrl = TextEditingController();
+  String _query = "";
 
   @override
   void initState() {
     super.initState();
     _future = _service.getPatientsForDoctor(widget.doctorAccount.id);
     _recentFuture = _recent.getAll();
+    _searchCtrl.addListener(() => setState(() => _query = _searchCtrl.text.trim().toLowerCase()));
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   void _refresh() => setState(() {
         _future = _service.getPatientsForDoctor(widget.doctorAccount.id);
         _recentFuture = _recent.getAll();
       });
+
+  List<Patient> _filter(List<Patient> list) {
+    if (_query.isEmpty) return list;
+    return list.where((p) =>
+        p.name.toLowerCase().contains(_query) || p.phoneNumber.contains(_query)).toList();
+  }
 
   void _openChat(Patient p) {
     final threadId = ChatService().threadId(widget.doctorAccount.email, p.phoneNumber);
@@ -68,7 +83,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(p.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  Text("${p.age} yrs · ${p.gender}", style: const TextStyle(color: AppColors.textSecondary, fontSize: 12.5)),
+                  Text("${p.age} yrs \u00b7 ${p.gender}", style: const TextStyle(color: AppColors.textSecondary, fontSize: 12.5)),
                 ],
               ),
             ),
@@ -197,46 +212,65 @@ class _PatientsScreenState extends State<PatientsScreen> {
               label: const Text("Add"),
             ),
           ),
-          FutureBuilder<List<RecentlyViewedPatient>>(
-            future: _recentFuture,
-            builder: (context, snap) {
-              if (!snap.hasData || snap.data!.isEmpty) return const SizedBox.shrink();
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("Recently viewed", style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 34,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: snap.data!.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (context, i) {
-                        final r = snap.data![i];
-                        return Chip(
-                          label: Text(r.name, style: const TextStyle(fontSize: 12)),
-                          avatar: const Icon(Icons.history_rounded, size: 14),
-                        );
-                      },
+          TextField(
+            controller: _searchCtrl,
+            decoration: InputDecoration(
+              hintText: "Search by name or phone...",
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () => _searchCtrl.clear(),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                ],
-              );
-            },
+            ),
           ),
+          const SizedBox(height: 12),
+          if (_query.isEmpty)
+            FutureBuilder<List<RecentlyViewedPatient>>(
+              future: _recentFuture,
+              builder: (context, snap) {
+                if (!snap.hasData || snap.data!.isEmpty) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Recently viewed", style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 34,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: snap.data!.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, i) {
+                          final r = snap.data![i];
+                          return Chip(
+                            label: Text(r.name, style: const TextStyle(fontSize: 12)),
+                            avatar: const Icon(Icons.history_rounded, size: 14),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                );
+              },
+            ),
           Expanded(
             child: FutureBuilder<List<Patient>>(
               future: _future,
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const AppLoading();
-                final patients = snapshot.data!;
-                if (patients.isEmpty) {
+                final all = snapshot.data!;
+                if (all.isEmpty) {
                   return const EmptyState(
                     icon: Icons.people_outline_rounded,
                     message: "No patients yet. Tap \"Add\" to register one.",
                   );
+                }
+                final patients = _filter(all);
+                if (patients.isEmpty) {
+                  return EmptyState(icon: Icons.search_off_rounded, message: "No patients match \"$_query\".");
                 }
                 return RefreshIndicator(
                   onRefresh: () async => _refresh(),
@@ -257,7 +291,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                                   style: const TextStyle(color: AppColors.primaryDark, fontWeight: FontWeight.w700)),
                             ),
                             title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text("${p.age} yrs · ${p.gender} · ${p.phoneNumber}"),
+                            subtitle: Text("${p.age} yrs \u00b7 ${p.gender} \u00b7 ${p.phoneNumber}"),
                             trailing: IconButton(
                               icon: const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.textSecondary),
                               onPressed: () => _openChat(p),
@@ -276,4 +310,3 @@ class _PatientsScreenState extends State<PatientsScreen> {
     );
   }
 }
-

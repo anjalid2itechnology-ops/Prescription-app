@@ -1,4 +1,7 @@
-﻿import "package:flutter/material.dart";
+import "package:flutter/material.dart";
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../services/api_config.dart';
 import "package:image_picker/image_picker.dart";
 import "../models/user_account.dart";
 import "../services/account_service.dart";
@@ -10,6 +13,8 @@ import "../widgets/avatar_picker.dart";
 import "doctor/doctor_dashboard.dart";
 import "pharmacist/pharmacist_dashboard.dart";
 import "patient/patient_dashboard.dart";
+import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
+import '../services/at_client_preference_builder.dart';
 
 enum RegisterRole { doctor, pharmacist, patient }
 
@@ -31,6 +36,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _photoPath;
   bool _busy = false;
   String? _error;
+  bool _obscurePassword = true;
 
   bool get _isPatient => widget.role == RegisterRole.patient;
 
@@ -93,6 +99,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
         setState(() => _error = "An account with this phone number already exists.");
         return;
       }
+
+      try {
+        final atClientPreference = await AtClientPreferenceBuilder.build();
+        final onboardResult = await AtOnboarding.onboard(
+          context: context,
+          config: AtOnboardingConfig(
+            atClientPreference: atClientPreference,
+            domain: AtClientPreferenceBuilder.rootDomain,
+            rootEnvironment: RootEnvironment.Production,
+            appAPIKey: 'c8e81c89-0556-4b50-8a29-032d9d43d511',
+          ),
+        );
+        if (onboardResult.status == AtOnboardingResultStatus.success && onboardResult.atsign != null) {
+          final checkRes = await http.get(Uri.parse("${ApiConfig.baseUrl}/atsign-check/${onboardResult.atsign}"));
+          final checkData = jsonDecode(checkRes.body);
+          if (checkData["taken"] == true) {
+            setState(() => _error = "This atSign is already linked to a ${checkData["role"]} account. Please use a different atSign.");
+            return;
+          }
+
+          await PatientAccountService().updateAtSign(
+            phone: _phoneCtrl.text.trim(),
+            atSign: onboardResult.atsign!,
+          );
+        }
+      } catch (_) {
+      }
+
+      if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => PatientDashboard(phoneNumber: _phoneCtrl.text.trim())),
         (route) => false,
@@ -116,10 +151,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _error = "Something went wrong. Try again.");
       return;
     }
+    UserAccount finalAccount = result;
+    try {
+      final atClientPreference = await AtClientPreferenceBuilder.build();
+      final onboardResult = await AtOnboarding.onboard(
+        context: context,
+        config: AtOnboardingConfig(
+          atClientPreference: atClientPreference,
+          domain: AtClientPreferenceBuilder.rootDomain,
+          rootEnvironment: RootEnvironment.Production,
+          appAPIKey: 'c8e81c89-0556-4b50-8a29-032d9d43d511',
+        ),
+      );
+      if (onboardResult.status == AtOnboardingResultStatus.success && onboardResult.atsign != null) {
+        final checkRes = await http.get(Uri.parse("${ApiConfig.baseUrl}/atsign-check/${onboardResult.atsign}"));
+        final checkData = jsonDecode(checkRes.body);
+        if (checkData["taken"] == true) {
+          setState(() => _error = "This atSign is already linked to a ${checkData["role"]} account. Please use a different atSign.");
+          return;
+        }
+
+        final updated = UserAccount(
+          id: result.id,
+          name: result.name,
+          email: result.email,
+          passwordHash: result.passwordHash,
+          role: result.role,
+          specialty: result.specialty,
+          atSign: onboardResult.atsign!,
+          createdAt: result.createdAt,
+          avatarIndex: result.avatarIndex,
+          photoPath: result.photoPath,
+          token: result.token,
+        );
+        final saved = await AccountService().updateAccount(updated);
+        if (saved != null) finalAccount = saved;
+      }
+    } catch (_) {
+      // AtSign onboarding failed ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â proceed with fallback atsign, don't block registration
+    }
+
+    if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => role == StaffRole.doctor
-          ? DoctorDashboard(account: result)
-          : PharmacistDashboard(account: result)),
+          ? DoctorDashboard(account: finalAccount)
+          : PharmacistDashboard(account: finalAccount)),
       (route) => false,
     );
   }
@@ -171,8 +247,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ],
                 TextField(
                   controller: _passCtrl,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: "Password", prefixIcon: Icon(Icons.lock_outline_rounded)),
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: "Password",
+                    prefixIcon: const Icon(Icons.lock_outline_rounded),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                  ),
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 14),
@@ -204,3 +287,4 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 }
+

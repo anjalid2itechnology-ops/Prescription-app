@@ -27,6 +27,9 @@ dependencies:
   cloud_firestore: ^6.7.1
   http: ^1.6.0
   flutter_secure_storage: ^10.3.1
+  fl_chart: ^1.2.0
+  at_client_mobile: ^3.3.1
+  at_onboarding_flutter: ^6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -35,3 +38,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+dependency_overrides:
+  http: 0.13.3
+  intl: 0.18.1
+

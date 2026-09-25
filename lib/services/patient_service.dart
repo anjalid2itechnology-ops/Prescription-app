@@ -1,7 +1,8 @@
-﻿import "dart:convert";
+import "dart:convert";
 import "../models/patient.dart";
 import "api_config.dart";
 import "api_client.dart";
+import "at_service.dart";
 
 class PatientService {
   Future<Patient?> addPatient({
@@ -23,7 +24,21 @@ class PatientService {
         },
       );
       if (res.statusCode != 200) return null;
-      return Patient.fromJson(jsonDecode(res.body));
+      final patient = Patient.fromJson(jsonDecode(res.body));
+
+      // Also store encrypted on AtSign network under doctor's own namespace
+      try {
+        final atKey = "patient.${patient.id}";
+        await AtService.instance.putJson(
+          key: atKey,
+          value: patient.toJson(),
+          isPublic: false,
+        );
+      } catch (_) {
+        // AtSign sync failed silently — MongoDB copy already saved, app still works
+      }
+
+      return patient;
     } catch (_) {
       return null;
     }

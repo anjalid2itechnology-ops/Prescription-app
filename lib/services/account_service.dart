@@ -1,8 +1,9 @@
-﻿import "dart:convert";
+import "dart:convert";
 import "package:http/http.dart" as http;
 import "../models/user_account.dart";
 import "api_config.dart";
 import "auth_storage.dart";
+import "at_service.dart";
 
 class AccountService {
   Future<UserAccount?> createAccount({
@@ -30,7 +31,24 @@ class AccountService {
         }),
       );
       if (res.statusCode != 200) return null;
-      return UserAccount.fromJson(jsonDecode(res.body));
+      final account = UserAccount.fromJson(jsonDecode(res.body));
+
+      try {
+        final atKey = "account.${account.id}";
+        await AtService.instance.putJson(
+          key: atKey,
+          value: {
+            "name": name,
+            "email": email,
+            "role": role.name,
+            "specialty": specialty,
+          },
+          isPublic: false,
+        );
+      } catch (_) {
+      }
+
+      return account;
     } catch (_) {
       return null;
     }
